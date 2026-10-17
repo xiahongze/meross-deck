@@ -276,7 +276,8 @@ MQTT payloads are plain JSON; the LAN AES layer is never used here. **Verified**
 ### Timing
 
 - The app waits 15 s for a reply, and 12 s for a command queued while it reconnects. **Code**
-- In testing, one connection plus three `System.All` GETs took about 2.4 s from Australia. **Verified**
+- In testing, one connection plus six GETs (System.All and System.Ability for three devices) took about 2.4 s from Australia. **Verified**
+- A malformed GET can end the whole connection: `Appliance.Control.TimerX` with `{"timerx": {"channel": 0}}` made the broker close it rather than return an `ERROR`. **Verified.** Open a new connection after a drop.
 - Many clients report that Meross throttles chatty connections. **Inferred**: no limit is visible in the app. Meross Deck polls the cloud once a minute by default and connects only when the LAN doesn't answer.
 
 ### Minimal session
@@ -432,6 +433,18 @@ Channels:
 | `Appliance.Control.Multiple` | `SET {"multiple": [<message>, ...]}`, where each inner header is just `{namespace, method}`. Batch size is `ability["Appliance.Control.Multiple"].maxCmdNum` | **Code** |
 | `Appliance.Control.Electricity` | `GET {"electricity": {"channel": 0}}` → `{channel, current, voltage, power}`. Power is in mW, current probably in mA, voltage in 0.1 V | **Code** / **Inferred** for units |
 | `Appliance.Control.Upgrade` | Firmware updates. The app always sends these over MQTT | **Code** |
+| `Appliance.Control.TimerX` | On-device schedules. `digest.timerx` lists `{channel, id, count}`. `GET {"timerx": {"id": "<id>"}}` returns the timer, see below. A GET without an `id` was refused | **Verified** |
+
+A timer, from the MSL610:
+
+```json
+{"timerx": {"id": "…", "alias": "Lamp on", "type": 1, "enable": 0, "channel": 0, "week": 255,
+            "time": 1080, "sunOffset": 0, "duration": 0, "extend": {"toggle": {"onoff": 1, "lmTime": 0}}}}
+```
+
+- `time` is minutes after midnight, so 1080 is 18:00. **Verified**
+- `week` is a day bitmask; 255 includes every day. **Inferred**
+- `extend.toggle.onoff` is the action. **Verified**
 
 ---
 

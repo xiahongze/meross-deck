@@ -36,7 +36,7 @@ PlasmoidItem {
         helper.runInTerminal(["login"], function(exitCode) {
             if (exitCode === 127)
                 Plasmoid.internalAction("configure").trigger();
-            deckClient.poll();
+            deckClient.poll(true);
         });
     }
 

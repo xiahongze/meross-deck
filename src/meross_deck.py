@@ -35,6 +35,7 @@ DEFAULT_API = "https://iotx.meross.com"
 MQTT_PORT = 443
 SESSION_FILE = "session.json"
 CACHE_FILE = "devices.json"
+COMMAND_LOG = "commands.log"
 # apiStatus codes that mean the token is no longer valid.
 TOKEN_ERRORS = {1019, 1022, 1201}
 # Namespaces an encrypted device still accepts in plain JSON over LAN.
@@ -732,12 +733,25 @@ def state_jobs(listed, cached):
     return jobs
 
 
-def snapshot(session, cache, uuids=None, lan=True, cloud=True, hub=None, force_list=False):
+def snapshot(session, cache, uuids=None, lan=True, cloud=True, hub=None, force_list=False, cloud_max_age=0):
+    """cloud_max_age: devices read through the cloud more recently than this
+    many seconds are served from the cache, so a fast LAN refresh rate never
+    becomes a fast cloud one."""
     refresh_devices(session, cache, force=force_list)
     hub = hub or Hub(session, cache, lan=lan, cloud=cloud)
     order = [u for u in cache.get("order", []) if not uuids or u in uuids]
-    jobs = {u: state_jobs(cache["listed"][u], cache["devices"].get(u) or {}) for u in order
-            if cache["listed"][u].get("onlineStatus") in (1, 3)}
+    now = time.time()
+    reused = set()
+    jobs = {}
+    for u in order:
+        if cache["listed"][u].get("onlineStatus") not in (1, 3):
+            continue
+        cached = cache["devices"].get(u) or {}
+        recent = cloud_max_age and now - cached.get("cloudAt", 0) < cloud_max_age and cached.get("lastState")
+        if recent and not (hub.lan and hub._lan_ready(u, now)):
+            reused.add(u)
+            continue
+        jobs[u] = state_jobs(cache["listed"][u], cached)
     results = hub.run(jobs) if jobs else {}
     devices = []
     for uuid in order:
@@ -755,13 +769,18 @@ def snapshot(session, cache, uuids=None, lan=True, cloud=True, hub=None, force_l
                     cached["garageConfig"] = (replies[ns] or {}).get("config")
             cached["lastState"] = all_payload
             cached["lastSeen"] = int(time.time())
+            if result["route"] == "cloud":
+                cached["cloudAt"] = int(time.time())
         elif cached.get("lastState"):
             all_payload = cached["lastState"]
         config = cached.get("garageConfig")
         extras = {"multipleConfig": config} if isinstance(config, list) else {"config": config}
         view = build_view(listed, cached, all_payload, extras)
-        view["route"] = result["route"] if result else ""
-        view["stale"] = not (result and "replies" in result)
+        if uuid in reused:
+            view["route"], view["stale"] = "cloud", False
+        else:
+            view["route"] = result["route"] if result else ""
+            view["stale"] = not (result and "replies" in result)
         view["seenAt"] = cached.get("lastSeen", 0)
         if result and "error" in result:
             view["error"] = str(result["error"])
@@ -796,8 +815,11 @@ def run_command(session, cache, uuid, kind, channel, value, lan=True, cloud=True
     hub = hub or Hub(session, cache, lan=lan, cloud=cloud)
     result = hub.run({uuid: [("SET", namespace, payload)]})[uuid]
     if "error" in result:
+        result["error"].route = result["route"]
+        result["error"].request = (namespace, payload)
         raise result["error"]
-    return {"ok": True, "uuid": uuid, "route": result["route"], "namespace": namespace}
+    return {"ok": True, "uuid": uuid, "route": result["route"], "namespace": namespace,
+            "payload": payload, "reply": result["replies"][0]}
 
 
 # ---------------------------------------------------------------- CLI
@@ -866,7 +888,7 @@ def cmd_state(args):
     session = load_session()
     cache = load_cache()
     result = snapshot(session, cache, uuids=set(args.uuid or []) or None, lan=not args.cloud_only,
-                      cloud=not args.lan_only, force_list=args.relist)
+                      cloud=not args.lan_only, force_list=args.relist, cloud_max_age=args.cloud_max_age)
     save_cache(cache)
     return result
 
@@ -894,12 +916,38 @@ def cmd_probe(args):
 
 def cmd_set(args):
     request = json.loads(base64.b64decode(args.request).decode("utf-8"))
-    session = load_session()
     cache = load_cache()
-    result = run_command(session, cache, request["uuid"], request.get("kind", "switch"),
-                         int(request.get("channel", 0)), request.get("value"),
-                         lan=not args.cloud_only, cloud=not args.lan_only)
+    try:
+        session = load_session()
+        result = run_command(session, cache, request["uuid"], request.get("kind", "switch"),
+                             int(request.get("channel", 0)), request.get("value"),
+                             lan=not args.cloud_only, cloud=not args.lan_only)
+    except MerossError as e:
+        log_command(cache, request, None, e)
+        raise
+    log_command(cache, request, result, None)
     return result
+
+
+def log_command(cache, request, result, error):
+    """One line per command in ~/.cache/meross-deck/commands.log, so what the
+    widget sent, and what the device said, can always be checked afterwards."""
+    uuid = request.get("uuid", "")
+    name = ((cache.get("listed") or {}).get(uuid) or {}).get("devName", "?")
+    compact = lambda obj: json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    if error is None:
+        outcome = "ok via %s: %s %s -> %s" % (result["route"], result["namespace"], compact(result["payload"]),
+                                             compact(result["reply"]))
+    else:
+        sent = getattr(error, "request", None)
+        what = "%s %s" % (sent[0], compact(sent[1])) if sent else compact(request)
+        outcome = "FAILED via %s: %s -> %s (%s%s)" % (getattr(error, "route", "-"), what, error, error.kind,
+                                                    ", code %s" % error.code if error.code else "")
+    line = "%s  %s [%s] ch%s  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), name, uuid,
+                                        request.get("channel", 0), outcome)
+    os.makedirs(cache_dir(), exist_ok=True)
+    with open(os.path.join(cache_dir(), COMMAND_LOG), "a", encoding="utf-8") as f:
+        f.write(line)
 
 
 def main(argv=None):
@@ -921,6 +969,8 @@ def main(argv=None):
         if name == "state":
             p.add_argument("--uuid", action="append")
             p.add_argument("--relist", action="store_true")
+            p.add_argument("--cloud-max-age", type=int, default=0, metavar="SECONDS",
+                           help="reuse cloud readings younger than this")
         elif name == "probe":
             p.add_argument("uuid", nargs="+")
             p.add_argument("--namespace", "-n", action="append")

@@ -139,6 +139,42 @@ TestCase {
         compare(client.doorPhase(garage, 0).phase, "closed");
     }
 
+    function test_timed_polls_reuse_cloud_readings() {
+        let seen = null;
+        const real = client.runner;
+        client.runner = function(args, done) { seen = args; real(args, done); };
+        client.poll();
+        tryVerify(() => !client.busy);
+        compare(seen.slice(0, 3), ["state", "--cloud-max-age", "58"]);
+        client.poll(true);
+        tryVerify(() => !client.busy);
+        compare(seen, ["state"]);
+        client.runner = real;
+    }
+
+    function test_signed_out_stops_polling() {
+        client.active = true;
+        verify(pollTimerRunning());
+        helper.failKind = "auth";
+        client.poll();
+        tryVerify(() => client.signedOut);
+        verify(!pollTimerRunning());
+        helper.failKind = "";
+        client.poll(true);
+        tryVerify(() => !client.signedOut);
+        verify(pollTimerRunning());
+        client.active = false;
+    }
+
+    function pollTimerRunning() {
+        for (let i = 0; i < client.data.length; i++) {
+            const t = client.data[i];
+            if (t.triggeredOnStart === true)
+                return t.running;
+        }
+        return false;
+    }
+
     function test_cloud_route_slows_polling() {
         for (const d of helper.state.devices)
             if (d.online)

@@ -83,6 +83,7 @@ If Plasma is already running an older copy, run `plasmashell --replace &` after 
 - What's kept is the session token, the account key and your user id, in `~/.config/meross-deck/session.json` with mode `0600`. Nothing sensitive goes into Plasma's settings or onto a command line.
 - The widget connects with its own MQTT client id, so it doesn't knock the Meross app off the cloud.
 - A device cache (names, local IPs, the last state) lives in `~/.cache/meross-deck/devices.json`.
+- Every command the widget sends gets one line in `~/.cache/meross-deck/commands.log`. Each line has the time, the device, what was sent, the route, and the device's reply or the error. Run `tail -f ~/.cache/meross-deck/commands.log` to watch it.
 - Nothing is sent anywhere except Meross's servers and your own devices.
 
 ## How it works
@@ -108,7 +109,7 @@ The code:
 - `contents/ui/Client.qml` owns polling and commands. It keeps a pending overlay so a slow poll can't snap a control back, and times door travel.
 - `contents/ui/DeckView.qml`, `DoorCard.qml` and `DeviceRow.qml` draw the deck.
 
-Each refresh tries the local network first, with a 2.5 s timeout, and falls back to the cloud. After a miss it skips the local attempt for five minutes, so away from home each refresh is a single cloud round trip of about 2 s.
+Each refresh tries the local network first, with a 2.5 s timeout, and falls back to the cloud. After a miss it skips the local attempt for five minutes. Cloud readings are reused until they're older than the cloud refresh rate, so the cloud is read at most once a minute however fast the local rate is. Commands, and the re-read just after one, always go out at once. While signed out the widget stops polling.
 
 ## Supported devices
 

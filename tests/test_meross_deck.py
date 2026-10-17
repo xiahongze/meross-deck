@@ -234,6 +234,21 @@ class SnapshotTests(unittest.TestCase):
         md.snapshot(SESSION, cache, hub=hub)
         self.assertEqual(sum(len(m.sent) for m in FakeMqtt.instances) - sent, 3)
 
+    def test_recent_cloud_readings_are_reused(self):
+        cache = listed_cache()
+        lamp = uuid_of("msl610")
+        answers = {lamp: fixture("system_all_msl610.json"), (lamp, "Appliance.System.Ability"): fixture("ability_msl610.json")}
+        hub = md.Hub(SESSION, cache, lan=False, mqtt_factory=lambda h, s: FakeMqtt(h, s, answers))
+        md.snapshot(SESSION, cache, uuids={lamp}, hub=hub, cloud_max_age=60)
+        sent = sum(len(m.sent) for m in FakeMqtt.instances)
+        again = md.snapshot(SESSION, cache, uuids={lamp}, hub=hub, cloud_max_age=60)
+        self.assertEqual(sum(len(m.sent) for m in FakeMqtt.instances), sent, "no second cloud read")
+        view = next(d for d in again["devices"] if d["uuid"] == lamp)
+        self.assertEqual((view["route"], view["stale"], view["channels"][0]["luminance"]), ("cloud", False, 80))
+        cache["devices"][lamp]["cloudAt"] -= 61
+        md.snapshot(SESSION, cache, uuids={lamp}, hub=hub, cloud_max_age=60)
+        self.assertGreater(sum(len(m.sent) for m in FakeMqtt.instances), sent)
+
     def test_legacy_toggle_used_when_togglex_is_missing(self):
         cache = listed_cache()
         plug = uuid_of("mss210p")
@@ -354,6 +369,27 @@ class CliTests(unittest.TestCase):
     def test_state_without_session_reports_auth(self):
         code, result = self.run_cli("state")
         self.assertEqual((code, result["ok"], result["kind"]), (0, False, "auth"))
+
+    def test_every_command_is_logged_once(self):
+        md.save_session(SESSION)
+        cache = listed_cache()
+        md.save_cache(cache)
+        lamp = uuid_of("msl610")
+        request = base64.b64encode(json.dumps({"uuid": lamp, "kind": "switch", "channel": 0, "value": True}).encode()).decode()
+        real_hub = md.Hub
+        with patch.object(md, "Hub", lambda session, cache, **kw: real_hub(
+                session, cache, lan=False, mqtt_factory=lambda h, s: FakeMqtt(h, s, {lamp: {}}))):
+            code, result = self.run_cli("set", request)
+        self.assertTrue(result["ok"])
+        unknown = base64.b64encode(json.dumps({"uuid": "nope", "kind": "door", "value": True}).encode()).decode()
+        code, result = self.run_cli("set", unknown)
+        self.assertEqual((result["ok"], result["kind"]), (False, "usage"))
+        lines = Path(md.cache_dir(), md.COMMAND_LOG).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertIn("Smart Floor Lamp", lines[0])
+        self.assertIn('ok via cloud: Appliance.Control.ToggleX {"togglex":{"channel":0,"onoff":1}}', lines[0])
+        self.assertIn("FAILED", lines[1])
+        self.assertIn("usage", lines[1])
 
     def test_session_file_is_private(self):
         md.save_session(SESSION)

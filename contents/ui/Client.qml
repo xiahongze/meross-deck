@@ -54,11 +54,17 @@ Item {
     property var _pending: ({})
     property var _staged: ({})
 
-    function poll() {
+    // Timed polls let the helper reuse a cloud reading younger than the cloud
+    // rate, so only LAN devices are read every few seconds. `fresh` polls,
+    // after a command or a click on refresh, always read.
+    function poll(fresh) {
         if (busy || !runner)
             return;
         busy = true;
-        runner(Meross.helperArgs("state", transport), _onPoll);
+        const args = Meross.helperArgs("state", transport);
+        if (!fresh)
+            args.push("--cloud-max-age", String(Math.max(0, cloudPollSeconds - 2)));
+        runner(args, _onPoll);
     }
 
     function _onPoll(exitCode, stdout) {
@@ -211,13 +217,14 @@ Item {
         }
         if (ended) {
             motion = m;
-            poll();
+            poll(true);
         }
     }
 
     Timer {
         id: pollTimer
-        running: client.active && client.runner !== null
+        // A rejected session stops polling; signing in or refresh starts it again.
+        running: client.active && client.runner !== null && !client.signedOut
         repeat: true
         triggeredOnStart: true
         interval: (client.route === "cloud" ? client.cloudPollSeconds : client.pollSeconds) * 1000
@@ -227,5 +234,5 @@ Item {
     Timer { interval: 5000; running: client.active && !client.moving; repeat: true; onTriggered: client.now = client.clock() }
     Timer { id: levelTimer; interval: client.debounceMs; onTriggered: client._flushLevels() }
     // Re-read shortly after a command so the confirmed state lands quickly.
-    Timer { id: confirmTimer; interval: 1500; onTriggered: client.poll() }
+    Timer { id: confirmTimer; interval: 1500; onTriggered: client.poll(true) }
 }

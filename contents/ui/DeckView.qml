@@ -168,7 +168,7 @@ Item {
                 implicitHeight: implicitWidth
                 enabled: !root.client.busy && !root.client.signedOut
                 opacity: hovered ? 1 : 0.6
-                onClicked: root.client.poll()
+                onClicked: root.client.poll(true)
                 Controls.ToolTip.visible: hovered
                 Controls.ToolTip.text: i18n("Refresh now")
             }
