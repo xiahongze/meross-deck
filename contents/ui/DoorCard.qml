@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 // One garage door: a drawn door that rises and falls with the state, and a
-// hold-to-act button so a stray click can never move it.
+// button that asks for confirmation, so a stray click can never move it.
 Rectangle {
     id: card
     property string name: ""
@@ -18,7 +18,8 @@ Rectangle {
     property bool stale: false
     property var colors: ({})
     property var formatSince: function(t) { return ""; }
-    property int holdMs: 700
+    property int confirmMs: 6000
+    property bool confirming: false
     signal activated(bool open)
 
     readonly property bool moving: phase === "opening" || phase === "closing"
@@ -182,71 +183,87 @@ Rectangle {
             elide: Text.ElideRight
         }
 
-        // Press and hold: the fill grows, and the command goes only when it's full.
-        Rectangle {
-            id: hold
-            objectName: "holdButton"
+        // A click asks first; the door moves only on the second, deliberate
+        // click. (A press-and-hold would clash with Plasma's own long press,
+        // which puts the desktop into edit mode.)
+        Item {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.smallSpacing
-            implicitHeight: holdLabel.implicitHeight + Kirigami.Units.smallSpacing * 2.6
-            radius: height / 2
+            implicitHeight: action.implicitHeight
+            id: actions
             readonly property bool enabledNow: card.interactive && !card.moving && card.phase !== "unknown"
             readonly property bool wantsOpen: card.phase !== "open"
             readonly property color actionTone: wantsOpen ? card.colors.warn : card.colors.good
-            property real fill: 0
-            opacity: enabledNow ? 1 : 0.4
-            color: Qt.alpha(card.colors.ink, holdHover.hovered && enabledNow ? 0.09 : 0.06)
-            border.color: Qt.alpha(actionTone, holdHover.hovered && enabledNow ? 0.5 : 0.22)
-            clip: true
+            onEnabledNowChanged: if (!enabledNow) card.confirming = false
 
-            Rectangle {
-                width: parent.width * hold.fill
-                height: parent.height
-                radius: parent.radius
-                color: Qt.alpha(hold.actionTone, 0.35)
+            DoorButton {
+                id: action
+                objectName: "actionButton"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: !card.confirming
+                active: actions.enabledNow
+                tone: actions.actionTone
+                text: card.moving ? i18n("Moving…") : actions.wantsOpen ? i18n("Open") : i18n("Close")
+                onClicked: {
+                    card.confirming = true;
+                    confirmTimeout.restart();
+                }
             }
-            Controls.Label {
-                id: holdLabel
-                anchors.centerIn: parent
-                text: card.moving ? i18n("Moving…") : hold.fill > 0 ? i18n("Keep holding…") : hold.wantsOpen ? i18n("Hold to open") : i18n("Hold to close")
-                color: hold.enabledNow ? hold.actionTone : card.colors.muted
-                font.pixelSize: Kirigami.Units.gridUnit * 0.56
-                font.weight: Font.DemiBold
-                font.letterSpacing: 0.4
-            }
-            NumberAnimation {
-                id: holdFill
-                target: hold
-                property: "fill"
-                from: 0
-                to: 1
-                duration: card.holdMs
-                onFinished: {
-                    if (hold.fill >= 1) {
-                        card.activated(hold.wantsOpen);
-                        hold.fill = 0;
+            RowLayout {
+                objectName: "confirmRow"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: card.confirming
+                spacing: Kirigami.Units.smallSpacing
+                DoorButton {
+                    objectName: "cancelButton"
+                    Layout.fillWidth: true
+                    tone: card.colors.muted
+                    text: i18n("Cancel")
+                    onClicked: card.confirming = false
+                }
+                DoorButton {
+                    objectName: "confirmButton"
+                    Layout.fillWidth: true
+                    filled: true
+                    tone: actions.actionTone
+                    text: actions.wantsOpen ? i18n("Open door") : i18n("Close door")
+                    onClicked: {
+                        card.confirming = false;
+                        card.activated(actions.wantsOpen);
                     }
                 }
             }
-            NumberAnimation { id: holdRelease; target: hold; property: "fill"; to: 0; duration: Kirigami.Units.shortDuration }
-            HoverHandler { id: holdHover; enabled: hold.enabledNow; cursorShape: Qt.PointingHandCursor }
-            TapHandler {
-                id: holdTap
-                enabled: hold.enabledNow
-                longPressThreshold: 10
-                onPressedChanged: {
-                    if (pressed) {
-                        holdRelease.stop();
-                        holdFill.restart();
-                    } else if (hold.fill < 1) {
-                        holdFill.stop();
-                        holdRelease.restart();
-                    }
-                }
-            }
-            Controls.ToolTip.visible: holdHover.hovered && hold.enabledNow && hold.fill === 0
-            Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
-            Controls.ToolTip.text: i18n("Press and hold to %1 the door", hold.wantsOpen ? i18n("open") : i18n("close"))
+            // An unanswered question goes away on its own.
+            Timer { id: confirmTimeout; interval: card.confirmMs; onTriggered: card.confirming = false }
         }
+    }
+
+    component DoorButton: Rectangle {
+        id: button
+        property string text: ""
+        property color tone: "white"
+        property bool filled: false
+        property bool active: true
+        signal clicked()
+        implicitHeight: label.implicitHeight + Kirigami.Units.smallSpacing * 2.6
+        radius: height / 2
+        opacity: active ? 1 : 0.4
+        color: filled ? (tap.pressed ? Qt.darker(tone, 1.15) : hover.hovered ? Qt.lighter(tone, 1.08) : tone)
+             : Qt.alpha(card.colors.ink, hover.hovered && active ? 0.09 : 0.06)
+        border.color: filled ? "transparent" : Qt.alpha(tone, hover.hovered && active ? 0.5 : 0.22)
+        Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
+        Controls.Label {
+            id: label
+            anchors.centerIn: parent
+            text: button.text
+            color: button.filled ? card.colors.onTone : button.active ? button.tone : card.colors.muted
+            font.pixelSize: Kirigami.Units.gridUnit * 0.56
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.4
+        }
+        HoverHandler { id: hover; enabled: button.active; cursorShape: Qt.PointingHandCursor }
+        TapHandler { id: tap; enabled: button.active; onTapped: button.clicked() }
     }
 }

@@ -73,26 +73,40 @@ TestCase {
         compare(a.width, b.width);
     }
 
-    function test_short_tap_does_not_move_the_door() {
-        const hold = findChild(findChild(deck, "door-" + garage), "holdButton");
-        mouseClick(hold);
-        wait(900);
+    function test_one_click_only_asks() {
+        const card = findChild(deck, "door-" + garage);
+        mouseClick(findChild(card, "actionButton"));
+        verify(card.confirming);
+        verify(findChild(card, "confirmRow").visible);
+        wait(200);
+        compare(helper.sent.length, 0);
+        mouseClick(findChild(card, "cancelButton"));
+        verify(!card.confirming);
         compare(helper.sent.length, 0);
     }
 
-    function test_hold_moves_the_door() {
+    function test_unanswered_confirmation_expires() {
         const card = findChild(deck, "door-" + garage);
-        const hold = findChild(card, "holdButton");
-        mousePress(hold);
-        wait(card.holdMs + 250);
-        mouseRelease(hold);
+        card.confirmMs = 150;
+        mouseClick(findChild(card, "actionButton"));
+        verify(card.confirming);
+        tryVerify(() => !card.confirming);
+        compare(helper.sent.length, 0);
+        card.confirmMs = 6000;
+    }
+
+    function test_confirm_moves_only_that_door() {
+        const card = findChild(deck, "door-" + garage);
+        mouseClick(findChild(card, "actionButton"));
+        mouseClick(findChild(card, "confirmButton"));
         tryVerify(() => helper.sent.length === 1);
         wait(100);
-        compare(helper.sent.length, 1, "only the held door moves");
+        compare(helper.sent.length, 1, "only the confirmed door moves");
         compare(helper.sent[0].uuid, garage);
         compare(helper.sent[0].kind, "door");
         compare(helper.sent[0].value, true);
         compare(card.phase, "opening");
+        verify(!card.confirming);
     }
 
     function test_lamp_toggle_and_sliders() {

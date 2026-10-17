@@ -10,9 +10,9 @@ A Plasma 6 desktop widget for Meross garage door openers, lights and plugs. When
 
 When a door is open the deck warms to amber. Lamps show brightness and colour while they're on:
 
-| A door left open | A door on its way up |
-| --- | --- |
-| ![Open door and lamp on](docs/screenshots/meross-deck-evening.png) | ![Door opening](docs/screenshots/meross-deck-opening.png) |
+| A door left open | Confirming | On its way up |
+| --- | --- | --- |
+| ![Open door and lamp on](docs/screenshots/meross-deck-evening.png) | ![Confirming before a door moves](docs/screenshots/meross-deck-confirm.png) | ![Door opening](docs/screenshots/meross-deck-opening.png) |
 
 ## What it shows
 
@@ -27,7 +27,7 @@ When a door is open the deck warms to amber. Lamps show brightness and colour wh
 - **Garage.** One card per door:
   - a drawn door that rises and falls with the state
   - the state and how long it has been that way (`for 23 min`, `since 4:30 PM`)
-  - **Hold to open** / **Hold to close**: the button fills while you press, and the command goes only when it's full, so a stray click can't move a door
+  - **Open** / **Close** asks first: the card shows **Cancel** and **Open door**, and only the second click moves the door. An unanswered question goes away after six seconds.
   - an obstruction warning when the opener reports one
 
   Meross openers report only open or closed, never "moving". After a command, or when a door is seen opening from the wall button or a remote, the card shows **Opening… 9 s** for the door's configured travel time and then re-reads. While any door is open, the deck takes on a soft amber wash.
@@ -115,7 +115,7 @@ Each refresh tries the local network first, with a 2.5 s timeout, and falls back
 
 | | Tested | Expected to work |
 | --- | --- | --- |
-| Garage | MSG100 (reads; open and close are code-derived) | MSG150, MSG200 (doors 1–3) |
+| Garage | MSG100 (state, open and close) | MSG150, MSG200 (doors 1–3) |
 | Lights | MSL610 (on/off, brightness, colour temperature) | MSL1xx, MSL4xx, MDL110 (on/off and brightness) |
 | Plugs | MSS210P (listed; offline during testing) | MSS1xx–3xx, MSS5xx–8xx switches, MSS425 strips |
 

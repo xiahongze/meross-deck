@@ -25,7 +25,7 @@ Source references are to jadx output, under `com/meross/...` and `com/reaper/fra
 - **Code**: read in the decompiled app but not exercised live.
 - **Inferred**: an educated guess.
 
-**Safety.** Garage door writes are **Code** only in this document. The `Appliance.GarageDoor.State` SET below was not sent during the investigation. The widget sends it only after a press-and-hold.
+**Safety.** The garage door SET was first sent by the owner, watching the door, from the widget. The widget asks for confirmation before every door command.
 
 ---
 
@@ -401,7 +401,8 @@ The standard library has no AES, so `meross_deck.py` contains a small AES-256. I
 
 - **GET:** `{"state": {"channel": 0}}` → `{"state": {"channel": 0, "open": 0, "lmTime": 0}}`, a single object. **Verified** (MSG100)
 - **PUSH:** `{"state": [{"channel": 0, "open": 1, "lmTime": ...}]}`, an **array**. **Code**
-- **SET:** `{"state": {"channel": 0, "open": 1, "uuid": "<device uuid>"}}`. `open` is 1 to open and 0 to close. **Code** (`PackageFactory.java:82-90`); not sent during the investigation.
+- **SET:** `{"state": {"channel": 0, "open": 1, "uuid": "<device uuid>"}}`. `open` is 1 to open and 0 to close. **Verified** on an MSG100 over LAN, both directions (`PackageFactory.java:82-90`).
+- **SETACK** echoes the state from **before** the command, plus `execute: 1`. Opening a closed door returns `{"state": {"channel": 0, "open": 0, "lmTime": 0, "execute": 1}}`. **Verified.** Don't read the new state from it; re-read after the travel time.
 
 Other fields:
 

@@ -114,6 +114,13 @@ TestCase {
         deck.themeMode = "dark";
         save("meross-deck-evening");
 
+        // Asking before the right door moves.
+        const right = findChild(deck, "door-" + doors[1].uuid);
+        right.confirmMs = 60000;
+        right.confirming = true;
+        save("meross-deck-confirm");
+        right.confirming = false;
+
         // The right door on its way up.
         client.moveDoor(doors[1].uuid, 0, true);
         preview.fakeNow += 5000;

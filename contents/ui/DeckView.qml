@@ -44,7 +44,9 @@ Item {
         accent: dark ? "#5aaaf5" : "#2a76c6",
         warn: dark ? "#f2b84b" : "#b7791f",
         bad: dark ? "#f2706a" : "#c43d36",
-        good: dark ? "#6fcf8b" : "#2f9e57"
+        good: dark ? "#6fcf8b" : "#2f9e57",
+        // Text on a filled accent button.
+        onTone: dark ? "#14161a" : "#ffffff"
     })
 
     function ago(ms) {
