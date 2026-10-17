@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="title" type="String"><default></default></entry>
+    <entry name="transport" type="String"><default>auto</default></entry>
+    <entry name="pollSeconds" type="Int"><default>10</default><min>5</min><max>300</max></entry>
+    <entry name="cloudPollSeconds" type="Int"><default>60</default><min>30</min><max>900</max></entry>
+    <entry name="themeMode" type="String"><default>system</default></entry>
+    <entry name="desktopOpacity" type="Int"><default>70</default><min>0</min><max>100</max></entry>
+    <entry name="hiddenDevices" type="StringList"><default></default></entry>
+  </group>
+</kcfg>
