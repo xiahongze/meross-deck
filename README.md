@@ -46,6 +46,8 @@ Changes show immediately and are confirmed by a re-read a moment later. If a com
 - A Meross account with the devices already set up in the Meross app
 - Konsole for the sign-in window. Without it, run the login command yourself.
 
+In a panel, Meross Deck uses a transparent garage symbol colored by the global theme, with an amber warning while a door is open or moving. Hover for open doors, lights/plugs on and offline devices; stale readings are identified. Click to open the full controls.
+
 ## Install
 
 ```sh
