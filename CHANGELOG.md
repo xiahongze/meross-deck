@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-11-08
+
+- Panel widgets stay compact with a theme-coloured garage symbol; hover summarises open doors, lights and plugs on, offline devices and stale data; click opens the full controls
+
 ## 0.1.0 — 2026-10-17
 
 - Garage door cards with a drawn door, timed travel, and a click-then-confirm control that cancels itself after six seconds.

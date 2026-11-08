@@ -12,7 +12,7 @@
     "Id": "io.github.xiahongze.merossdeck",
     "License": "MIT",
     "Name": "Meross Deck",
-    "Version": "0.1.0",
+    "Version": "0.2.0",
     "Website": "https://github.com/xiahongze/meross-deck"
   },
   "X-Plasma-API-Minimum-Version": "6.0",
